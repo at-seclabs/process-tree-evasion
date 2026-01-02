@@ -19,7 +19,6 @@ The core idea is to break the visual chain of execution.
 | └── `cmd.exe` (Child)               | └── `cmd.exe` (Child)            |
 | *Easily flagged by EDR*             | *Looks like user activity*       |
 
-FAILED_TO_RENDER_IMAGE (Add your Process Explorer screenshot here showing the spoofed parent)
 
 ---
 # PPID Spoofer - Windows Process Parent ID Spoofing Tool
