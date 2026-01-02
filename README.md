@@ -21,9 +21,6 @@ The core idea is to break the visual chain of execution.
 
 
 ---
-# PPID Spoofer - Windows Process Parent ID Spoofing Tool
-
-A C++ tool that demonstrates PPID (Parent Process ID) spoofing on Windows systems by creating a new process with a spoofed parent process.
 
 ## 📋 Overview
 
