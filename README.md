@@ -1,164 +1,93 @@
-# Process tree evasion
+# Process tree evasion lab
 
-![Language](https://img.shields.io/badge/Language-C%2B%2B-00599C?style=for-the-badge&logo=c%2B%2B)
-![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows)
+Small Windows proof of concept for studying parent process ID (PPID)
+spoofing and the resulting process-tree telemetry.
 
-Native C++ implementation of the **Parent PID Spoofing** technique. It allows the execution of an arbitrary payload (e.g., `notepad.exe`, shells, beacons) while making it appear as a child of a legitimate system process (like `explorer.exe` or `svchost.exe`).
+The program starts `notepad.exe` with a user-selected process set as its parent
+through `PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`. I wrote it to better understand
+Windows process creation, token privileges, and what endpoint monitoring tools
+can observe when the parent shown in a process tree is not the process that
+actually initiated the operation.
 
-This technique is widely used to evade **EDR** (Endpoint Detection and Response) and **SOC** analysis that relies on parent-child process tree anomalies.
+This is a learning project, not an EDR bypass. Modern endpoint products can use
+telemetry beyond the reported parent PID, and the technique may generate alerts.
 
----
+## What it does
 
-## 📸 Proof of Concept
+1. Requests `SeDebugPrivilege` for the current process token.
+2. Finds the oldest accessible instance of a process selected by name.
+3. Opens that process with the rights required to use it as a parent.
+4. Creates a `STARTUPINFOEX` attribute list containing the selected parent.
+5. Starts `%WINDIR%\System32\notepad.exe` with
+   `EXTENDED_STARTUPINFO_PRESENT`.
+6. Reports the new PID and releases the allocated memory and handles.
 
-The core idea is to break the visual chain of execution.
+The payload is intentionally fixed to Notepad. The repository does not include
+shellcode, a beacon, persistence, or a mechanism for injecting code into the
+new process.
 
-| **Standard Execution (Suspicious)** | **Spoofed Execution (Stealthy)** |
-|:-----------------------------------:|:--------------------------------:|
-| `MaliciousTool.exe` 🚩              | `explorer.exe` (Parent) ✅       |
-| └── `cmd.exe` (Child)               | └── `cmd.exe` (Child)            |
-| *Easily flagged by EDR*             | *Looks like user activity*       |
+## Repository layout
 
-
----
-
-## 📋 Overview
-
-This tool allows you to launch `notepad.exe` with a spoofed parent process ID, making it appear as if it was spawned by a different process than the actual parent. This technique is commonly used in security research, red team operations, and penetration testing to evade detection systems that monitor process parent-child relationships.
-
-![Spoofing explorer.exe](./images/explorer.png)
-Spoofing explorer.exe
-
-![Spoofing svchost.exe](./images/svchost.png)
-Spoofing svchost.exe
-
-## ⚠️ Disclaimer
-
-**FOR EDUCATIONAL AND AUTHORIZED TESTING PURPOSES ONLY**
-
-This tool is intended for:
-- Security research and education
-- Authorized penetration testing
-- Understanding Windows process internals
-- Defensive security training
-
-Use only on systems you own or have explicit permission to test. The author is not responsible for any misuse of this tool.
-
-## 🚀 Features
-
-- **PPID Spoofing**: Create processes with arbitrary parent IDs
-- **Privilege Escalation**: Requires and enables `SeDebugPrivilege`
-- **Clean Implementation**: Proper memory management and cleanup
-- **Error Handling**: Comprehensive error checking and reporting
-- **Process Recommendations**: Suggests stable processes for spoofing
-- **Cross-architecture**: Works on both 32-bit and 64-bit Windows
-
-## 📁 Project Structure
-
-```
-process-tree-evasion/
-├── main.cpp          # Main application logic
-├── proc.h            # Header file for process utilities
-├── proc.cpp          # Process utility implementations
-├── README.md         # This documentation
+```text
+.
+├── images/     Screenshots from local lab runs
+├── main.cpp    Process creation and attribute-list setup
+├── proc.cpp    Privilege, process lookup, and handle helpers
+└── proc.h      Helper declarations
 ```
 
-## 🔧 Requirements
+## Requirements
 
-- **Windows 10/11** or **Windows Server 2016+**
-- **Visual Studio 2019+** or **MinGW-w64**
-- **Administrator privileges** (for `SeDebugPrivilege`)
-- **C++17** compatible compiler
+- Windows 10 or 11
+- A C++ compiler and Windows SDK, such as Visual Studio with the Desktop
+  development with C++ workload
+- An elevated terminal for targets that require `SeDebugPrivilege`
 
-## 🛠️ Building
+The project uses the Windows API and must link against `Advapi32.lib` for the
+token privilege functions. No Visual Studio solution or other build definition
+is currently included, so the source files need to be added to a Windows console
+application manually.
 
-### Visual Studio
-1. Open Visual Studio
-2. Create new C++ Console Application
-3. Add `main.cpp` and `proc.cpp` to the project
-4. Add `proc.h` to Header Files
-5. Build in **Release** mode
+## Running the lab
 
-## 🎯 Usage
+Run the compiled program from an elevated terminal, then enter the executable
+name of a running process when prompted. The program launches Notepad and prints
+the selected parent PID and the PID of the newly created process.
 
-1. **Run as Administrator**: Right-click and select "Run as administrator"
-2. **Enter Process Name**: Type the name of the process you want to spoof as parent
-3. **Watch Notepad Launch**: The tool will launch notepad.exe with the spoofed parent
+Use a disposable Windows test environment with endpoint telemetry enabled. A
+process viewer alone shows only part of the story; the useful exercise is to
+compare the displayed process tree with the events and alerts recorded by the
+monitoring stack.
 
-### Example Usage
-```
-[+] Debug privilege enabled
+Example screenshots from local runs are available in [`images/`](./images/).
 
-=== RECOMMENDED STABLE PROCESSES ===
-1. explorer.exe   (Windows Explorer)
-2. dwm.exe        (Desktop Window Manager)
-3. RuntimeBroker.exe
-=====================================
+## Implementation notes
 
-Enter parent process name: explorer.exe
-[+] Process ID: 1234
-[+] Parent process handle opened
+The proof of concept uses the documented extended process creation API:
 
-[*] Launching notepad.exe with spoofed parent...
+- `OpenProcessToken` and `AdjustTokenPrivileges`
+- `CreateToolhelp32Snapshot` and `Process32FirstW` / `Process32NextW`
+- `InitializeProcThreadAttributeList`
+- `UpdateProcThreadAttribute`
+- `CreateProcessA`
 
-??????????????????????????????????????????
-?       PPID SPOOFING SUCCESSFUL!       ?
-??????????????????????????????????????????
-? New Process PID:    5678               ?
-? Spoofed Parent PID: 1234               ?
-? Parent Process:     explorer.exe        ?
-??????????????????????????????????????????
+Enabling `SeDebugPrivilege` is not privilege escalation. It only enables a
+privilege already present in the current token, which is why an elevated process
+is normally required for this lab.
 
-[+] All resources cleaned up
-```
+## Limitations
 
-## Recommended Processes for Spoofing
+- The child executable is fixed to `notepad.exe`.
+- Only process names can be entered; when several instances exist, the oldest
+  accessible process is selected.
+- Cross-architecture behavior has not been validated.
+- There are no automated tests or reproducible build files yet.
+- Detection results depend on the Windows version and monitoring product.
+- The code demonstrates parent selection; it does not demonstrate that an EDR
+  has been bypassed.
 
-The tool suggests these stable Windows processes:
-- **explorer.exe**: Windows Explorer (most common)
-- **dwm.exe**: Desktop Window Manager (stable, always running)
-- **RuntimeBroker.exe**: UWP app broker process
+## Responsible use
 
-### How PPID Spoofing Works
-
-1. **Enable Debug Privilege**: Acquire `SeDebugPrivilege` to open handles to other processes
-2. **Find Target Process**: Locate the PID of the process to spoof as parent
-3. **Open Process Handle**: Obtain a handle to the target process
-4. **Create Attribute List**: Initialize process thread attribute list
-5. **Set Parent Attribute**: Use `UpdateProcThreadAttribute()` to set parent process
-6. **Create Process**: Launch new process with `EXTENDED_STARTUPINFO_PRESENT` flag
-7. **Cleanup**: Properly release all handles and memory
-
-### Key API Functions Used
-
-- `EnableDebugPrivilege()`: Custom function to enable debugging privileges
-- `GetProcId()`: Find process ID by name
-- `InitializeProcThreadAttributeList()`: Initialize process attribute list
-- `UpdateProcThreadAttribute()`: Set parent process attribute
-- `CreateProcessA()`: Create new process with extended startup info
-
-## Dependencies
-
-- **Windows API**: `windows.h`, `processthreadsapi.h`, `securitybaseapi.h`
-- **Standard Library**: `iostream`, `string`
-
-## formance Considerations
-
-- **Memory**: Uses heap allocation for attribute lists
-- **Handles**: Properly closes all handles to avoid leaks
-- **Error Recovery**: Graceful failure on permission errors
-
-## Known Issues & Limitations
-
-1. **Administrator Required**: Must run with elevated privileges
-2. **64-bit Compatibility**: May need adjustments for Wow64 processes
-3. **Process Termination**: If spoofed parent exits, child remains orphaned
-4. **Anti-Virus Detection**: May trigger security software alerts
-
-## Security Considerations
-
-- **Detection**: Modern EDR/AV solutions can detect PPID spoofing
-- **Forensics**: Leaves traces in process creation events
-- **Defense**: Monitor for processes with suspicious parent relationships
-
-This project is licensed for educational purposes.
+This repository is intended for Windows internals study, defensive research,
+and authorized security testing. Use it only on systems you own or are explicitly
+permitted to assess.
