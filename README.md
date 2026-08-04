@@ -61,6 +61,14 @@ monitoring stack.
 
 Example screenshots from local runs are available in [`images/`](./images/).
 
+### Example: `explorer.exe` as the reported parent
+
+![Notepad started with explorer.exe as its reported parent](./images/explorer.png)
+
+### Example: `svchost.exe` as the reported parent
+
+![Notepad started with svchost.exe as its reported parent](./images/svchost.png)
+
 ## Implementation notes
 
 The proof of concept uses the documented extended process creation API:
